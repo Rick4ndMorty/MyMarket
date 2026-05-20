@@ -1,0 +1,213 @@
+openapi: 3.0.3
+info:
+  title: Shop Service API
+  description: 店铺服务 - 店铺管理、客服消息(含AI预留)
+  version: 1.0.0
+
+servers:
+  - url: http://127.0.0.1:8080/api
+    description: Gateway
+
+paths:
+  # ---- 店铺 ----
+  /shop:
+    post:
+      tags: [Shop]
+      summary: 卖家入驻申请
+      security: [BearerAuth: []]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ShopApplyReq' }
+      responses:
+        '200': { description: 申请成功 }
+
+  /shop/{id}:
+    get:
+      tags: [Shop]
+      summary: 获取店铺详情
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ShopVO' }
+    put:
+      tags: [Shop]
+      summary: 编辑店铺信息
+      security: [BearerAuth: []]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ShopUpdateReq' }
+      responses:
+        '200': { description: 更新成功 }
+
+  /shop/my:
+    get:
+      tags: [Shop]
+      summary: 获取当前用户的店铺(卖家视角)
+      security: [BearerAuth: []]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ShopVO' }
+
+  # ---- 客服消息 (人工) ----
+  /shop/customer/message:
+    post:
+      tags: [CustomerService]
+      summary: 发送客服消息(人工)
+      security: [BearerAuth: []]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendMessageReq' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/MessageVO' }
+
+  /shop/customer/message/list:
+    get:
+      tags: [CustomerService]
+      summary: 获取聊天记录(按店铺+用户)
+      security: [BearerAuth: []]
+      parameters:
+        - { name: shop_id, in: query, required: true, schema: { type: integer, format: int64 } }
+        - { name: user_id, in: query, required: false, schema: { type: integer, format: int64 } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, default: 50 } }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          records: { type: array, items: { $ref: '#/components/schemas/MessageVO' } }
+                          total:   { type: integer }
+
+  /shop/customer/message/{id}/read:
+    put:
+      tags: [CustomerService]
+      summary: 标记消息已读
+      security: [BearerAuth: []]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200': { description: 标记成功 }
+
+  # ---- AI 客服预留接口 (内部调用) ----
+  /internal/shop/customer/message/ai:
+    post:
+      tags: [AI-CustomerService-Internal]
+      summary: AI客服发送消息(内部接口，供AI模块调用)
+      description: >
+        预留接口，供未来AI客服模块调用。sender_type=AI, message_type=AI。
+        内部调用，不走网关，直接访问 shop-service。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shop_id, user_id, content]
+              properties:
+                shop_id: { type: integer, format: int64, description: 店铺ID }
+                user_id: { type: integer, format: int64, description: 买家用户ID }
+                content: { type: string, description: AI生成的回复内容 }
+      responses:
+        '200':
+          description: AI消息发送成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/MessageVO' }
+
+components:
+  schemas:
+    Result:
+      type: object
+      properties:
+        code:    { type: integer }
+        message: { type: string }
+        data:    { type: object }
+
+    ShopApplyReq:
+      type: object
+      required: [shop_name]
+      properties:
+        shop_name:   { type: string, maxLength: 128 }
+        logo:        { type: string }
+        description: { type: string }
+        phone:       { type: string }
+
+    ShopUpdateReq:
+      type: object
+      properties:
+        shop_name:   { type: string }
+        logo:        { type: string }
+        description: { type: string }
+        phone:       { type: string }
+
+    ShopVO:
+      type: object
+      properties:
+        id:          { type: integer, format: int64 }
+        user_id:     { type: integer, format: int64 }
+        shop_name:   { type: string }
+        logo:        { type: string }
+        description: { type: string }
+        phone:       { type: string }
+        status:      { type: string, enum: [PENDING, ACTIVE, CLOSED, REJECTED] }
+
+    SendMessageReq:
+      type: object
+      required: [shop_id, content]
+      properties:
+        shop_id: { type: integer, format: int64 }
+        content: { type: string }
+
+    MessageVO:
+      type: object
+      properties:
+        id:           { type: integer, format: int64 }
+        shop_id:      { type: integer, format: int64 }
+        user_id:      { type: integer, format: int64 }
+        sender_type:  { type: string, enum: [BUYER, SELLER, AI] }
+        message_type: { type: string, enum: [CUSTOMER, AI] }
+        content:      { type: string }
+        is_read:      { type: integer }
+        create_time:  { type: string, format: date-time }

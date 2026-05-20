@@ -1,0 +1,2 @@
+[{"resource":"register","limitApp":"default","grade":1,"count":3,"strategy":0,"controlBehavior":0,"clusterMode":false},
+{"resource":"login","limitApp":"default","grade":1,"count":3,"strategy":0,"controlBehavior":0,"clusterMode":false}]

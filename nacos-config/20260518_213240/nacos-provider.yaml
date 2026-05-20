@@ -1,0 +1,7 @@
+app:
+  config:
+    name: "Nacos配置中心应用"
+    version: "2.0.0"
+    description: "这是从Nacos配置中心读取的配置"
+    author: "开发者"
+    environment: "生产环境"

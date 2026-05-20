@@ -1,0 +1,247 @@
+openapi: 3.0.3
+info:
+  title: Product Service API
+  description: 商品服务 - 商品发布、SKU管理、库存管理、商品搜索
+  version: 1.0.0
+
+servers:
+  - url: http://127.0.0.1:8080/api
+    description: Gateway
+
+paths:
+  /product:
+    post:
+      tags: [Product]
+      summary: 发布商品(含SKU)
+      security: [BearerAuth: []]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductSaveReq' }
+      responses:
+        '200': { description: 发布成功 }
+    get:
+      tags: [Product]
+      summary: 商品搜索/列表
+      parameters:
+        - { name: keyword, in: query, schema: { type: string }, description: 搜索关键词 }
+        - { name: shop_id, in: query, schema: { type: integer, format: int64 }, description: 按店铺过滤 }
+        - { name: category_id, in: query, schema: { type: integer, format: int64 } }
+        - { name: status, in: query, schema: { type: string, enum: [ON_SHELF, OFF_SHELF] } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductPageResult' }
+
+  /product/{id}:
+    get:
+      tags: [Product]
+      summary: 商品详情(含SKU列表)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ProductDetailVO' }
+    put:
+      tags: [Product]
+      summary: 编辑商品
+      security: [BearerAuth: []]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductSaveReq' }
+      responses:
+        '200': { description: 更新成功 }
+
+  /product/{id}/status:
+    put:
+      tags: [Product]
+      summary: 上架/下架商品
+      security: [BearerAuth: []]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [ON_SHELF, OFF_SHELF] }
+      responses:
+        '200': { description: 操作成功 }
+
+  /product/sku/{skuId}:
+    put:
+      tags: [SKU]
+      summary: 更新SKU信息(价格/规格)
+      security: [BearerAuth: []]
+      parameters:
+        - { name: skuId, in: path, required: true, schema: { type: integer, format: int64 } }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SkuUpdateReq' }
+      responses:
+        '200': { description: 更新成功 }
+
+  # ---- 库存操作 (内部 Feign 调用) ----
+  /product/inventory/deduct:
+    put:
+      tags: [Inventory-Internal]
+      summary: 扣减库存(内部接口，供order-service调用)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items: { $ref: '#/components/schemas/InventoryDeductItem' }
+      responses:
+        '200': { description: 扣减成功 }
+
+  /product/inventory/restore:
+    put:
+      tags: [Inventory-Internal]
+      summary: 归还库存(内部接口，订单取消时调用)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items: { $ref: '#/components/schemas/InventoryDeductItem' }
+      responses:
+        '200': { description: 归还成功 }
+
+  /product/sku/batch:
+    get:
+      tags: [SKU-Internal]
+      summary: 批量查询SKU(内部接口)
+      parameters:
+        - { name: ids, in: query, required: true, schema: { type: string }, description: 逗号分隔的SKU ID列表 }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/SkuVO' }
+
+components:
+  schemas:
+    Result:
+      type: object
+      properties:
+        code: { type: integer }
+        message: { type: string }
+        data: {}
+
+    ProductSaveReq:
+      type: object
+      required: [product_name, skus]
+      properties:
+        product_name: { type: string }
+        description:  { type: string }
+        main_image:   { type: string }
+        images:       { type: array, items: { type: string } }
+        category_id:  { type: integer, format: int64 }
+        skus:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/SkuSaveReq' }
+
+    SkuSaveReq:
+      type: object
+      required: [sku_name, price, stock]
+      properties:
+        sku_name:       { type: string }
+        specifications: { type: object }
+        price:          { type: number, format: double }
+        image:          { type: string }
+        stock:          { type: integer, minimum: 0 }
+
+    SkuUpdateReq:
+      type: object
+      properties:
+        sku_name: { type: string }
+        price:    { type: number }
+        image:    { type: string }
+
+    ProductPageResult:
+      allOf:
+        - $ref: '#/components/schemas/Result'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/ProductVO' } }
+                total:   { type: integer }
+
+    ProductVO:
+      type: object
+      properties:
+        id:           { type: integer, format: int64 }
+        shop_id:      { type: integer, format: int64 }
+        product_name: { type: string }
+        description:  { type: string }
+        main_image:   { type: string }
+        images:       { type: array, items: { type: string } }
+        category_id:  { type: integer, format: int64 }
+        status:       { type: string }
+        min_price:    { type: number }
+        max_price:    { type: number }
+
+    ProductDetailVO:
+      allOf:
+        - $ref: '#/components/schemas/ProductVO'
+        - type: object
+          properties:
+            skus: { type: array, items: { $ref: '#/components/schemas/SkuVO' } }
+
+    SkuVO:
+      type: object
+      properties:
+        id:             { type: integer, format: int64 }
+        product_id:     { type: integer, format: int64 }
+        sku_code:       { type: string }
+        sku_name:       { type: string }
+        specifications: { type: object }
+        price:          { type: number }
+        image:          { type: string }
+        stock:          { type: integer }
+        locked_stock:   { type: integer }
+
+    InventoryDeductItem:
+      type: object
+      required: [sku_id, quantity]
+      properties:
+        sku_id:   { type: integer, format: int64 }
+        quantity: { type: integer, minimum: 1 }

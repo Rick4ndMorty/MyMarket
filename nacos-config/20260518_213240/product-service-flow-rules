@@ -1,0 +1,2 @@
+[{"resource":"publish","limitApp":"default","grade":1,"count":3,"strategy":0,"controlBehavior":0,"clusterMode":false},
+{"resource":"productSearch","limitApp":"default","grade":1,"count":3,"strategy":0,"controlBehavior":0,"clusterMode":false}]

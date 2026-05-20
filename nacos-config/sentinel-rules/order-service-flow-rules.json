@@ -1,0 +1,10 @@
+[
+  {
+    "resource": "createOrder",
+    "grade": 1,
+    "count": 50,
+    "controlBehavior": 0,
+    "strategy": 0,
+    "limitApp": "default"
+  }
+]

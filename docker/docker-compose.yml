@@ -1,0 +1,185 @@
+version: '3.8'
+
+services:
+  # ==================== 基础设施 ====================
+
+  mysql:
+    image: mysql:8.0.33
+    container_name: ts-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ../sql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  nacos:
+    image: nacos/nacos-server:v2.2.3
+    container_name: ts-nacos
+    environment:
+      MODE: standalone
+      PREFER_HOST_MODE: hostname
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: ts-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  sentinel-dashboard:
+    image: bladex/sentinel-dashboard:1.8.6
+    container_name: ts-sentinel
+    ports:
+      - "8858:8858"
+    environment:
+      JAVA_OPTS: "-Dserver.port=8858"
+
+  zipkin:
+    image: openzipkin/zipkin:2.24
+    container_name: ts-zipkin
+    ports:
+      - "9411:9411"
+
+  seata-server:
+    image: seataio/seata-server:1.6.1
+    container_name: ts-seata
+    environment:
+      SEATA_PORT: 8091
+      STORE_MODE: db
+      SEATA_IP: seata-server
+    ports:
+      - "8091:8091"
+      - "7091:7091"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      nacos:
+        condition: service_started
+
+  # ==================== 微服务 ====================
+
+  gateway-service:
+    build:
+      context: ../gateway-service
+      dockerfile: ../docker/Dockerfile
+    container_name: ts-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      NACOS_NAMESPACE: public
+    depends_on:
+      nacos:
+        condition: service_started
+
+  user-service:
+    build:
+      context: ../user-service
+      dockerfile: ../docker/Dockerfile
+    container_name: ts-user-service
+    ports:
+      - "8081:8081"
+    environment:
+      NACOS_NAMESPACE: public
+    depends_on:
+      mysql:
+        condition: service_healthy
+      nacos:
+        condition: service_started
+
+  shop-service:
+    build:
+      context: ../shop-service
+      dockerfile: ../docker/Dockerfile
+    container_name: ts-shop-service
+    ports:
+      - "8082:8082"
+    environment:
+      NACOS_NAMESPACE: public
+    depends_on:
+      mysql:
+        condition: service_healthy
+      nacos:
+        condition: service_started
+
+  product-service:
+    build:
+      context: ../product-service
+      dockerfile: ../docker/Dockerfile
+    container_name: ts-product-service
+    ports:
+      - "8083:8083"
+    environment:
+      NACOS_NAMESPACE: public
+    depends_on:
+      mysql:
+        condition: service_healthy
+      nacos:
+        condition: service_started
+
+  order-service:
+    build:
+      context: ../order-service
+      dockerfile: ../docker/Dockerfile
+    container_name: ts-order-service
+    ports:
+      - "8084:8084"
+    environment:
+      NACOS_NAMESPACE: public
+    depends_on:
+      mysql:
+        condition: service_healthy
+      nacos:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+
+  payment-service:
+    build:
+      context: ../payment-service
+      dockerfile: ../docker/Dockerfile
+    container_name: ts-payment-service
+    ports:
+      - "8085:8085"
+    environment:
+      NACOS_NAMESPACE: public
+    depends_on:
+      mysql:
+        condition: service_healthy
+      nacos:
+        condition: service_started
+
+  web-ui:
+    build:
+      context: ../web-ui
+      dockerfile: ../docker/Dockerfile.nginx
+    container_name: ts-web-ui
+    ports:
+      - "3000:80"
+    depends_on:
+      - gateway-service
+
+volumes:
+  mysql-data:

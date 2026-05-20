@@ -1,0 +1,114 @@
+# ============================================================
+# Nacos 共享配置 (common-config.yaml)
+# 所有微服务共同读取
+# ============================================================
+
+spring:
+  # Zipkin + Sleuth 全链路跟踪
+  zipkin:
+    base-url: http://127.0.0.1:9411
+    sender:
+      type: web
+  sleuth:
+    sampler:
+      probability: 1.0
+    messaging:
+      rabbit:
+        enabled: true
+    web:
+      client:
+        enabled: true
+    reactor:
+      enabled: true
+
+  # RabbitMQ (Spring Cloud Stream)
+  rabbitmq:
+    host: 127.0.0.1
+    port: 5672
+    username: guest
+    password: guest
+
+  cloud:
+    stream:
+      binders:
+        defaultRabbit:
+          type: rabbit
+          environment:
+            spring:
+              rabbitmq:
+                host: 127.0.0.1
+                port: 5672
+                username: guest
+                password: guest
+      # # 消息通道绑定定义
+      # bindings:
+      #   # 订单事件 → 生产者
+      #   orderEvent-out-0:
+      #     destination: order-events
+      #     content-type: application/json
+      #   # 订单事件 → 消费者
+      #   orderEvent-in-0:
+      #     destination: order-events
+      #     group: ${spring.application.name}
+      #     content-type: application/json
+
+# Seata 客户端公共配置
+seata:
+    enabled: true
+    application-id: ${spring.application.name}
+    tx-service-group: tradestation-tx-group
+    config:
+      type: nacos
+      nacos:
+        server-addr: 127.0.0.1:8848
+        namespace: public
+        group: SEATA_GROUP
+        data-id: seataServer.properties
+    registry:
+      type: nacos
+      nacos:
+        server-addr: 127.0.0.1:8848
+        namespace: public
+        group: SEATA_GROUP
+        application: seata-server
+
+# Sentinel 公共配置 + Nacos 动态数据源
+spring.cloud.sentinel:
+    transport:
+      dashboard: 127.0.0.1:8858
+    eager: true
+    datasource:
+      ds-flow-rules:
+        nacos:
+          server-addr: 127.0.0.1:8848
+          namespace: ${NACOS_NAMESPACE:public}
+          data-id: ${spring.application.name}-flow-rules
+          group-id: DEFAULT_GROUP
+          data-type: json
+          rule-type: flow
+      ds-degrade-rules:
+        nacos:
+          server-addr: 127.0.0.1:8848
+          namespace: ${NACOS_NAMESPACE:public}
+          data-id: ${spring.application.name}-degrade-rules
+          group-id: DEFAULT_GROUP
+          data-type: json
+          rule-type: degrade
+
+feign.sentinel:
+    enabled: true
+
+# 抑制 Nacos ClientWorker 轮询日志（无实际变化时不刷新）
+logging.level.com.alibaba.nacos.client.config.impl.ClientWorker: WARN
+
+# MyBatis-Plus 全局配置
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0

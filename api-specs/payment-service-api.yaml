@@ -1,0 +1,93 @@
+openapi: 3.0.3
+info:
+  title: Payment Service API
+  description: 支付服务 - 生成支付单、模拟支付回调
+  version: 1.0.0
+
+servers:
+  - url: http://127.0.0.1:8080/api
+    description: Gateway
+
+paths:
+  /payment:
+    post:
+      tags: [Payment]
+      summary: 生成支付单
+      security: [BearerAuth: []]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePaymentReq' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/PaymentVO' }
+
+  /payment/{id}:
+    get:
+      tags: [Payment]
+      summary: 查询支付单状态
+      security: [BearerAuth: []]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/PaymentVO' }
+
+  /payment/callback/mock/{paymentNo}:
+    post:
+      tags: [Payment]
+      summary: 模拟支付成功回调
+      description: 模拟第三方支付回调，将支付单状态改为SUCCESS，并通知订单服务更新订单状态。
+      parameters:
+        - { name: paymentNo, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: 模拟支付成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Result' }
+
+components:
+  schemas:
+    Result:
+      type: object
+      properties:
+        code: { type: integer }
+        message: { type: string }
+        data: {}
+
+    CreatePaymentReq:
+      type: object
+      required: [order_id]
+      properties:
+        order_id:       { type: integer, format: int64 }
+        payment_method: { type: string, enum: [MOCK], default: MOCK }
+
+    PaymentVO:
+      type: object
+      properties:
+        id:             { type: integer, format: int64 }
+        payment_no:     { type: string }
+        order_id:       { type: integer, format: int64 }
+        order_no:       { type: string }
+        user_id:        { type: integer, format: int64 }
+        amount:         { type: number }
+        payment_method: { type: string }
+        status:         { type: string, enum: [PENDING, SUCCESS, FAILED, REFUNDED] }
+        pay_time:       { type: string, format: date-time }
+        create_time:    { type: string, format: date-time }
