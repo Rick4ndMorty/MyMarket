@@ -26,15 +26,20 @@
         </el-table-column>
         <el-table-column prop="rejectReason" label="拒绝原因" min-width="140" />
         <el-table-column label="申请时间" width="170">
-          <template #default="{ row }">
-            {{ row.createTime ? row.createTime.substring(0, 16) : '' }}
-          </template>
+          <template #default="{ row }">{{ row.createTime ? row.createTime.substring(0, 16) : '' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right" v-if="filterStatus === 'PENDING' || !filterStatus">
+        <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <template v-if="row.status === 'PENDING'">
               <el-button size="small" type="success" @click="audit(row.id, 'ACTIVE')">通过</el-button>
               <el-button size="small" type="danger" @click="openReject(row.id)">拒绝</el-button>
+            </template>
+            <template v-if="row.status === 'ACTIVE'">
+              <el-button size="small" @click="openDetail(row.id)">详情</el-button>
+              <el-button size="small" type="danger" @click="openClose(row.id)">关闭</el-button>
+            </template>
+            <template v-if="row.status !== 'PENDING' && row.status !== 'ACTIVE'">
+              <el-button size="small" @click="openDetail(row.id)">详情</el-button>
             </template>
           </template>
         </el-table-column>
@@ -43,6 +48,7 @@
       <el-pagination class="pagination" layout="prev, pager, next, total" :total="total" :page-size="size" v-model:current-page="page" @current-change="fetchShops" />
     </el-card>
 
+    <!-- 拒绝对话框 -->
     <el-dialog v-model="rejectDialog" title="拒绝原因" width="400px">
       <el-input v-model="rejectReason" type="textarea" :rows="3" placeholder="请输入拒绝原因" />
       <template #footer>
@@ -50,18 +56,40 @@
         <el-button type="danger" :loading="auditing" @click="doReject">确认拒绝</el-button>
       </template>
     </el-dialog>
+
+    <!-- 关闭确认 -->
+    <el-dialog v-model="closeDialog" title="关闭店铺" width="400px">
+      <p>确定要关闭此店铺吗？关闭后店铺将无法展示商品。</p>
+      <el-input v-model="closeReason" type="textarea" :rows="2" placeholder="关闭原因（选填）" style="margin-top: 10px" />
+      <template #footer>
+        <el-button @click="closeDialog = false">取消</el-button>
+        <el-button type="danger" :loading="auditing" @click="doClose">确认关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 店铺详情 -->
+    <el-dialog v-model="detailDialog" title="店铺详情" width="500px">
+      <el-descriptions :column="1" border size="small" v-if="detailShop">
+        <el-descriptions-item label="ID">{{ detailShop.id }}</el-descriptions-item>
+        <el-descriptions-item label="店铺名">{{ detailShop.shopName }}</el-descriptions-item>
+        <el-descriptions-item label="店主ID">{{ detailShop.userId }}</el-descriptions-item>
+        <el-descriptions-item label="联系电话">{{ detailShop.phone }}</el-descriptions-item>
+        <el-descriptions-item label="描述">{{ detailShop.description || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="statusType(detailShop.status)" size="small">{{ statusMap[detailShop.status] || detailShop.status }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="创建时间">{{ detailShop.createTime?.substring(0, 16) || '-' }}</el-descriptions-item>
+      </el-descriptions>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { getAdminShops, auditShop } from '@/api/admin'
+import { getAdminShops, getAdminShopDetail, auditShop, closeShop } from '@/api/admin'
 import { ElMessage } from 'element-plus'
 
-const statusMap: Record<string, string> = {
-  PENDING: '待审核', ACTIVE: '已通过', REJECTED: '已拒绝', CLOSED: '已关闭'
-}
-
+const statusMap: Record<string, string> = { PENDING: '待审核', ACTIVE: '已通过', REJECTED: '已拒绝', CLOSED: '已关闭' }
 function statusType(s: string) {
   return { PENDING: 'warning', ACTIVE: 'success', REJECTED: 'danger', CLOSED: 'info' }[s] || ''
 }
@@ -78,6 +106,13 @@ const filterStatus = ref('')
 const rejectDialog = ref(false)
 const rejectId = ref<number | null>(null)
 const rejectReason = ref('')
+
+const closeDialog = ref(false)
+const closeId = ref<number | null>(null)
+const closeReason = ref('')
+
+const detailDialog = ref(false)
+const detailShop = ref<any>(null)
 
 async function fetchShops() {
   loading.value = true
@@ -117,6 +152,31 @@ async function doReject() {
     rejectDialog.value = false
     fetchShops()
   } catch { /* handled */ } finally { auditing.value = false }
+}
+
+function openClose(id: number) {
+  closeId.value = id
+  closeReason.value = ''
+  closeDialog.value = true
+}
+
+async function doClose() {
+  if (!closeId.value) return
+  auditing.value = true
+  try {
+    await closeShop(closeId.value, closeReason.value ? { reason: closeReason.value } : undefined)
+    ElMessage.success('店铺已关闭')
+    closeDialog.value = false
+    fetchShops()
+  } catch { /* handled */ } finally { auditing.value = false }
+}
+
+async function openDetail(id: number) {
+  try {
+    const res: any = await getAdminShopDetail(id)
+    detailShop.value = res.data || null
+    detailDialog.value = true
+  } catch { /* handled */ }
 }
 
 onMounted(() => fetchShops())

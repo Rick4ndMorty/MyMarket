@@ -95,15 +95,31 @@
                   <span class="review-time">{{ r.createTime }}</span>
                 </div>
                 <div class="review-content">{{ r.content }}</div>
+                <!-- 追评按钮（未展开时显示） -->
                 <el-button
-                  v-if="userStore.token"
+                  v-if="userStore.token && replyingReviewId !== r.id"
                   text
                   size="small"
                   type="primary"
-                  @click="showReply(r.id)"
+                  @click="startReply(r.id)"
                 >
                   追评
                 </el-button>
+                <!-- 追评回答框（内联在对应评论下方，独立于底部的新建评论框） -->
+                <div v-if="replyingReviewId === r.id" class="followup-form">
+                  <el-input
+                    v-model="followupContent"
+                    type="textarea"
+                    :rows="2"
+                    placeholder="写下你的追评..."
+                  />
+                  <div style="margin-top: 6px; display: flex; gap: 8px;">
+                    <el-button size="small" type="primary" :loading="reviewSubmitting" @click="submitFollowup(r.id)">
+                      提交追评
+                    </el-button>
+                    <el-button size="small" @click="cancelReply">取消</el-button>
+                  </div>
+                </div>
                 <div v-if="r.followups?.length" class="followup-list">
                   <div v-for="f in r.followups" :key="f.id" class="followup-item">
                     <span class="followup-tag">追评</span>
@@ -151,7 +167,7 @@
                 </div>
                 <div v-if="q.answers?.length" class="answer-list">
                   <div v-for="a in q.answers" :key="a.id" class="answer-item">
-                    <span class="a-label">A</span>
+                    <span :class="a.userId === q.userId ? 'q-label' : 'a-label'">{{ a.userId === q.userId ? 'Q' : 'A' }}</span>
                     <span>{{ a.content }}</span>
                     <span class="review-time">{{ a.createTime }}</span>
                   </div>
@@ -253,6 +269,9 @@ const questionTotal = ref(0)
 const questionSubmitting = ref(false)
 const newQuestionContent = ref('')
 const replyParentId = ref<number>()
+// 追评内联表单状态
+const replyingReviewId = ref<number | null>(null)
+const followupContent = ref('')
 const answeringQuestionId = ref<number>()
 const newAnswerContent = ref('')
 
@@ -286,7 +305,23 @@ function addToCart() {
 }
 
 function buyNow() {
-  addToCart()
+  const sku = selectedSku.value || product.value.skus?.[0]
+  if (!sku) {
+    ElMessage.warning('请选择规格')
+    return
+  }
+  // 将当前商品存入 sessionStorage，直接进入结算页（绕过购物车）
+  const buyNowItem = {
+    skuId: sku.id,
+    skuName: sku.skuName || '默认',
+    price: sku.price,
+    quantity: quantity.value,
+    productId: product.value.id,
+    productName: product.value.productName,
+    image: product.value.images?.[0] || '',
+    shopId: product.value.shopId
+  }
+  sessionStorage.setItem('buyNowItems', JSON.stringify([buyNowItem]))
   router.push('/checkout')
 }
 
@@ -362,6 +397,41 @@ async function submitReview() {
 function showReply(id: number) {
   replyParentId.value = id
   newReviewContent.value = ''
+}
+
+// 追评内联表单 - 展开
+function startReply(reviewId: number) {
+  replyingReviewId.value = reviewId
+  followupContent.value = ''
+}
+
+// 追评内联表单 - 取消
+function cancelReply() {
+  replyingReviewId.value = null
+  followupContent.value = ''
+}
+
+// 追评内联表单 - 提交
+async function submitFollowup(reviewId: number) {
+  if (!followupContent.value.trim()) return
+  reviewSubmitting.value = true
+  try {
+    await createReview({
+      productId: Number(route.params.id),
+      type: 'FOLLOWUP',
+      content: followupContent.value,
+      parentId: reviewId
+    })
+    followupContent.value = ''
+    replyingReviewId.value = null
+    ElMessage.success('追评发表成功')
+    reviewPage.value = 1
+    await fetchReviews()
+  } catch {
+    // handled by interceptor
+  } finally {
+    reviewSubmitting.value = false
+  }
 }
 
 async function submitQuestion() {

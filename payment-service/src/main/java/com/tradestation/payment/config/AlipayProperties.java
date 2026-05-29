@@ -11,6 +11,7 @@ public class AlipayProperties {
     private String appId;
     private String privateKey;
     private String alipayPublicKey;
+    private String appPublicKey;
     private String gateway;
     private String notifyUrl;
     private String returnUrl;

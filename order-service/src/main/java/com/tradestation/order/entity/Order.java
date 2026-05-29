@@ -25,6 +25,10 @@ public class Order {
 
     private String addressSnapshot;
 
+    private String remark;
+
+    private String buyerName;
+
     private String status;
 
     private String cancelReason;
@@ -59,6 +63,12 @@ public class Order {
 
     public String getAddressSnapshot() { return addressSnapshot; }
     public void setAddressSnapshot(String addressSnapshot) { this.addressSnapshot = addressSnapshot; }
+
+    public String getRemark() { return remark; }
+    public void setRemark(String remark) { this.remark = remark; }
+
+    public String getBuyerName() { return buyerName; }
+    public void setBuyerName(String buyerName) { this.buyerName = buyerName; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

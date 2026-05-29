@@ -12,6 +12,8 @@ public class OrderVO {
     private BigDecimal totalAmount;
     private BigDecimal payAmount;
     private String status;
+    private String remark;
+    private String buyerName;
     private String cancelReason;
     private LocalDateTime payTime;
     private LocalDateTime shipTime;
@@ -38,6 +40,12 @@ public class OrderVO {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public String getRemark() { return remark; }
+    public void setRemark(String remark) { this.remark = remark; }
+
+    public String getBuyerName() { return buyerName; }
+    public void setBuyerName(String buyerName) { this.buyerName = buyerName; }
 
     public String getCancelReason() { return cancelReason; }
     public void setCancelReason(String cancelReason) { this.cancelReason = cancelReason; }

@@ -71,4 +71,25 @@ public class PaymentAdminController {
         wrapper.orderByDesc(PaymentRecord::getCreateTime);
         return Result.ok(paymentRecordMapper.selectPage(new Page<>(page, size), wrapper));
     }
+
+    // 退款操作
+    @PutMapping("/payments/{id}/refund")
+    public Result<Void> refundPayment(
+            @RequestHeader("X-User-Role") String role,
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, String> body) {
+        checkAdmin(role);
+        PaymentRecord record = paymentRecordMapper.selectById(id);
+        if (record == null) {
+            throw new BusinessException(ErrorCode.PAYMENT_NOT_FOUND);
+        }
+        if (!"SUCCESS".equals(record.getStatus())) {
+            throw new BusinessException(ErrorCode.PAYMENT_ALREADY_PROCESSED, "只有支付成功的记录才能退款");
+        }
+        record.setStatus("REFUNDED");
+        record.setUpdateTime(java.time.LocalDateTime.now());
+        paymentRecordMapper.updateById(record);
+        log.info("Admin refunded payment: id={}, paymentNo={}", id, record.getPaymentNo());
+        return Result.ok();
+    }
 }

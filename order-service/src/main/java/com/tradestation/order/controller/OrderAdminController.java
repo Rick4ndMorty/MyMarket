@@ -6,7 +6,9 @@ import com.tradestation.common.enums.ErrorCode;
 import com.tradestation.common.exception.BusinessException;
 import com.tradestation.common.result.Result;
 import com.tradestation.order.entity.Order;
+import com.tradestation.order.entity.OrderItem;
 import com.tradestation.order.mapper.OrderMapper;
+import com.tradestation.order.mapper.OrderItemMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
@@ -24,6 +26,7 @@ import java.util.Map;
 public class OrderAdminController {
 
     private final OrderMapper orderMapper;
+    private final OrderItemMapper orderItemMapper;
 
     private void checkAdmin(String role) {
         if (!"ADMIN".equals(role)) {
@@ -99,6 +102,51 @@ public class OrderAdminController {
         order.setUpdateTime(LocalDateTime.now());
         orderMapper.updateById(order);
         log.info("Admin updated order status: id={}, status={}", id, newStatus);
+        return Result.ok();
+    }
+
+    // 获取订单详情（含订单商品）
+    @GetMapping("/orders/{id}")
+    public Result<Map<String, Object>> getOrderDetail(
+            @RequestHeader("X-User-Role") String role,
+            @PathVariable Long id) {
+        checkAdmin(role);
+        Order order = orderMapper.selectById(id);
+        if (order == null) {
+            throw new BusinessException(ErrorCode.ORDER_NOT_FOUND);
+        }
+        // 查询订单商品
+        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<OrderItem> itemWrapper =
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
+        itemWrapper.eq(OrderItem::getOrderId, id);
+        java.util.List<OrderItem> items = orderItemMapper.selectList(itemWrapper);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("order", order);
+        result.put("items", items);
+        return Result.ok(result);
+    }
+
+    // 订单退款
+    @PutMapping("/orders/{id}/refund")
+    public Result<Void> refundOrder(
+            @RequestHeader("X-User-Role") String role,
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, String> body) {
+        checkAdmin(role);
+        Order order = orderMapper.selectById(id);
+        if (order == null) {
+            throw new BusinessException(ErrorCode.ORDER_NOT_FOUND);
+        }
+        if ("REFUNDED".equals(order.getStatus())) {
+            throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "订单已退款");
+        }
+        String reason = body != null ? body.getOrDefault("reason", "管理员退款") : "管理员退款";
+        order.setStatus("REFUNDED");
+        order.setCancelReason(reason);
+        order.setUpdateTime(LocalDateTime.now());
+        orderMapper.updateById(order);
+        log.info("Admin refunded order: id={}, reason={}", id, reason);
         return Result.ok();
     }
 }

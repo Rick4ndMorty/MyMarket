@@ -108,12 +108,20 @@
           </el-form-item>
 
           <el-divider>SKU 列表</el-divider>
+          <!-- SKU 表头 -->
+          <div class="sku-header">
+            <span class="sku-h-col" style="width: 130px;">规格名称</span>
+            <span class="sku-h-col" style="width: 120px;">价格（元）</span>
+            <span class="sku-h-col" style="width: 110px;">库存数量</span>
+            <span class="sku-h-col" style="width: 200px;">规格图片URL</span>
+            <span class="sku-h-col" style="width: 50px;">操作</span>
+          </div>
           <div v-for="(sku, idx) in form.skus" :key="idx" class="sku-row">
-            <el-input v-model="sku.skuName" placeholder="规格名" style="width: 130px;" />
-            <el-input-number v-model="sku.price" :min="0.01" :precision="2" placeholder="价格" style="width: 120px;" />
-            <el-input-number v-model="sku.stock" :min="0" placeholder="库存" style="width: 100px;" />
-            <el-input v-model="sku.image" placeholder="图片URL" style="width: 150px;" />
-            <el-button type="danger" text @click="form.skus.splice(idx, 1)" :disabled="form.skus.length <= 1">
+            <el-input v-model="sku.skuName" placeholder="如: 红色-L" style="width: 130px;" />
+            <el-input-number v-model="sku.price" :min="0.01" :precision="2" style="width: 120px;" />
+            <el-input-number v-model="sku.stock" :min="0" style="width: 110px;" />
+            <el-input v-model="sku.image" placeholder="图片URL（选填）" style="width: 200px;" />
+            <el-button type="danger" text @click="form.skus.splice(idx, 1)" :disabled="form.skus.length <= 1" style="width: 50px;">
               删除
             </el-button>
           </div>
@@ -196,7 +204,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getMyShopSafe } from '@/api/shop'
-import { publish, search, updateProduct, updateStatus, deleteProduct } from '@/api/product'
+import { publish, search, getDetail, updateProduct, updateStatus, deleteProduct } from '@/api/product'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 
@@ -217,6 +225,7 @@ const editingProduct = ref<any>(null)
 const formRef = ref<FormInstance>()
 
 interface SkuForm {
+  id?: number
   skuName: string
   price: number
   stock: number
@@ -240,21 +249,36 @@ function addSku() {
   form.skus.push({ skuName: '', price: 0.01, stock: 0, image: '' })
 }
 
-function openProductDialog(product: any) {
+async function openProductDialog(product: any) {
   editingProduct.value = product
   if (product) {
-    form.name = product.productName
-    form.description = product.description || ''
-    form.category = product.category || ''
-    form.imageInput = product.images?.join(',') || ''
-    form.skus = product.skus?.length
-      ? product.skus.map((s: any) => ({
+    // 编辑模式：从后端加载完整商品详情（含 SKU 与库存）
+    try {
+      const detail: any = await getDetail(product.id)
+      const detailData = detail.data
+      form.name = detailData.productName
+      form.description = detailData.description || ''
+      form.category = detailData.category || ''
+      form.imageInput = detailData.images?.join(',') || ''
+      if (detailData.skus && detailData.skus.length > 0) {
+        form.skus = detailData.skus.map((s: any) => ({
+          id: s.id,
           skuName: s.skuName || '默认',
           price: s.price,
-          stock: s.stock,
+          stock: s.stock ?? 0,
           image: s.image || ''
         }))
-      : [{ skuName: '默认', price: 0.01, stock: 0, image: '' }]
+      } else {
+        form.skus = [{ skuName: '默认', price: 0.01, stock: 0, image: '' }]
+      }
+    } catch {
+      // 降级：使用列表数据（可能缺少 SKU）
+      form.name = product.productName
+      form.description = product.description || ''
+      form.category = product.category || ''
+      form.imageInput = product.images?.join(',') || ''
+      form.skus = [{ skuName: '默认', price: 0.01, stock: 0, image: '' }]
+    }
   } else {
     form.name = ''
     form.description = ''
@@ -275,6 +299,7 @@ async function handleProductSubmit() {
     .filter(Boolean)
 
   const skus = form.skus.map(s => ({
+    id: s.id,
     skuName: s.skuName || '默认',
     price: s.price,
     stock: s.stock,
@@ -417,6 +442,20 @@ onMounted(async () => {
   font-size: 14px;
 }
 
+.sku-header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+  padding: 0 0 6px;
+  border-bottom: 1px solid #dcdfe6;
+}
+.sku-h-col {
+  font-size: 12px;
+  font-weight: 600;
+  color: #606266;
+  text-align: left;
+}
 .sku-row {
   display: flex;
   gap: 8px;

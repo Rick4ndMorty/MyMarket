@@ -17,6 +17,8 @@ CREATE TABLE t_order (
     total_amount      DECIMAL(10,2)   NOT NULL COMMENT '订单总金额',
     pay_amount        DECIMAL(10,2)   NOT NULL COMMENT '实付金额',
     address_snapshot  JSON            NOT NULL COMMENT '收货地址快照',
+    remark          VARCHAR(512)    DEFAULT NULL COMMENT '买家备注',
+    buyer_name      VARCHAR(64)     DEFAULT NULL COMMENT '买家用户名（冗余）',
     status            VARCHAR(32)     NOT NULL DEFAULT 'PENDING_PAYMENT' COMMENT '状态: PENDING_PAYMENT/PENDING_SHIP/SHIPPED/COMPLETED/CANCELLED',
     cancel_reason     VARCHAR(512)    DEFAULT NULL COMMENT '取消原因',
     pay_time          DATETIME        DEFAULT NULL COMMENT '支付时间',

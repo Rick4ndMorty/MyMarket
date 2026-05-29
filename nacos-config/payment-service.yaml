@@ -14,14 +14,28 @@ payment:
   mock:
     success-rate: 1.0
 
-# 支付宝沙箱配置 (留空则自动回退 MOCK 支付)
+# 支付宝沙箱配置
 alipay:
-  app-id: ${ALIPAY_APP_ID:}
-  private-key: ${ALIPAY_PRIVATE_KEY:}
-  alipay-public-key: ${ALIPAY_PUBLIC_KEY:}
+  app-id: ""
+  # 应用私钥（PKCS8 格式，用于签名请求）
+  private-key: "“
+  # 支付宝公钥（在沙箱控制台上传应用公钥后由支付宝生成，用于验证回调签名）
+  alipay-public-key: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAieEtVtuJvFXi+q8WjJ+Kd6paeeFiIxxT8hEFewyA5816RkEsO4YzIenp0rX8InkeG+i/oCqW2/LbSIcTPQCRSHYTMk7dg8gPMfj3wkUCGVhfCIULfHX/9IbpLd1iKMA/S6NVpyK99JSK8A3yF/N/l3o8BJboUfzFKEun/lcUheFxoBncZ10B8fGhy+RBBSjS6tHVPF5jjIRoJUF+IvrK4eC5jMU4hPY1L6AzHqfHjdMDigNoibZRS0ALhx9FkWlZgBUOpZleoNHAwIvTZCO8ZaI80c7NS1GbmHxpHEc4mBSb0qyoupP9bFvvwCaPg5fIXPlZbakuLm4elFBXJQGw0QIDAQAB"
+  # 应用公钥（上传到支付宝沙箱的原始公钥，用于本地密钥对验证）
+  app-public-key: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuxfmV2w+k1uhiBK0Ljb+2vaA9EFemAFGMVuvsR+5q1yL7hZBM5eNiskR84rLZXGMtjyS4PgIbiP+05M3aA2IJyq9+CxI1JLcA+JVCKhT4RFZEZI23f/JBJop8kr0BMrnjPPIjDwyaVADSSa3lkgiY4uPeoKw/cwG+94mhAt8BRPJk9DHc5c0LgzFVNDdadckZam8jFzotXtPIN/Ql4pPcwssrp0xSoC8VupxcNft5hmOySgOR5yHmhc2r4Vif4ZwSXTY+oYlqYLa6sDsMaT7uTvha4RGICinfAunQ83DQQNFpXeqreFwswwlBiPPRCSoQxcu8W/+Mv55uvFiLfyMDQIDAQAB"
   gateway: https://openapi-sandbox.dl.alipaydev.com/gateway.do
-  notify-url: ${ALIPAY_NOTIFY_URL:}
-  return-url: ${ALIPAY_RETURN_URL:http://localhost:3000/payment/return}
+  # FRP 内网穿透公网地址（支付宝异步通知用）
+  notify-url:
+  # 同步跳转地址（用户支付完成后浏览器跳回）
+  return-url:
   charset: UTF-8
   format: json
   sign-type: RSA2
+
+# 沙箱买家账号（用于在支付宝支付页面登录的测试账号）
+sandbox:
+  buyer:
+    # 请到支付宝沙箱控制台 -> 沙箱账号 获取以下信息
+    account: ""
+    login-password: "111111"
+    payment-password: "111111"

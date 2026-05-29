@@ -244,6 +244,63 @@ public class PaymentServiceImpl implements PaymentService {
         return Result.fail(ErrorCode.CIRCUIT_BREAKER);
     }
 
+    /**
+     * 主动查询支付宝支付状态并同步更新本地记录
+     * 安全关键：即使异步通知未到达，通过此方法也能确保支付状态正确同步
+     * 实现幂等性：已支付成功的订单不会被重复处理
+     */
+    @Override
+    @GlobalTransactional(name = "queryAlipayAndSync", rollbackFor = Exception.class)
+    @Transactional
+    public Result<PaymentVO> queryAlipayAndSync(String paymentNo) {
+        // 1. 查找本地支付记录
+        PaymentRecord record = paymentRecordMapper.selectOne(
+                new LambdaQueryWrapper<PaymentRecord>()
+                        .eq(PaymentRecord::getPaymentNo, paymentNo));
+        if (record == null) {
+            throw new BusinessException(ErrorCode.PAYMENT_NOT_FOUND);
+        }
+
+        // 2. 如果本地已是成功状态，直接返回（幂等性保护）
+        if ("SUCCESS".equals(record.getStatus())) {
+            log.info("Payment already SUCCESS locally, skip query: paymentNo={}", paymentNo);
+            return Result.ok(toVO(record));
+        }
+
+        // 3. 向支付宝查询真实支付状态
+        Map<String, String> result;
+        try {
+            result = alipayService.queryPayStatus(paymentNo);
+        } catch (Exception e) {
+            log.error("Failed to query Alipay for paymentNo={}: {}", paymentNo, e.getMessage());
+            return Result.ok(toVO(record)); // 查询失败不阻塞，返回当前状态
+        }
+
+        String tradeStatus = result.get("trade_status");
+        log.info("Alipay query response: paymentNo={}, tradeStatus={}", paymentNo, tradeStatus);
+
+        // 4. 支付宝返回 TRADE_SUCCESS 且本地仍为 PENDING → 同步更新
+        if ("TRADE_SUCCESS".equals(tradeStatus) && "PENDING".equals(record.getStatus())) {
+            record.setStatus("SUCCESS");
+            record.setPayTime(LocalDateTime.now());
+            record.setCallbackData(JSON.toJSONString(result));
+            record.setUpdateTime(LocalDateTime.now());
+            paymentRecordMapper.updateById(record);
+
+            // 通知订单服务更新状态
+            Map<String, Object> statusBody = Map.of("status", "PENDING_SHIP");
+            Result<Void> updateResult = orderFeignClient.updateStatus(record.getOrderId(), statusBody);
+            if (updateResult.getCode() != 200) {
+                log.warn("Failed to update order status via queryAlipayAndSync: paymentNo={}, orderId={}",
+                        paymentNo, record.getOrderId());
+            }
+
+            log.info("Payment synced from Alipay: paymentNo={}, orderId={}", paymentNo, record.getOrderId());
+        }
+
+        return Result.ok(toVO(record));
+    }
+
     private String generatePaymentNo() {
         long timestamp = System.currentTimeMillis();
         int random = (int) (Math.random() * 900000) + 100000;

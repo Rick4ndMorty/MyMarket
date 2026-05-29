@@ -18,3 +18,10 @@ export function getPaymentByNo(paymentNo: string) {
 export function mockPayCallback(paymentNo: string) {
   return request.post(`/payment/callback/mock/${paymentNo}`)
 }
+
+/**
+ * 主动查询支付宝支付状态（二次确认，防止异步通知丢失）
+ */
+export function queryAlipayStatus(paymentNo: string) {
+  return request.post(`/payment/query-alipay/${paymentNo}`)
+}

@@ -1,0 +1,1 @@
+import{O as a}from"./index-DiClgKIj.js";function n(t){return a.post("/payment",t)}function r(t){return a.get(`/payment/no/${t}`)}function o(t){return a.post(`/payment/callback/mock/${t}`)}function u(t){return a.post(`/payment/query-alipay/${t}`)}export{n as c,r as g,o as m,u as q};

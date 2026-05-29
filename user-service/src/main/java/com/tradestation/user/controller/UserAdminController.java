@@ -99,4 +99,48 @@ public class UserAdminController {
         log.info("Admin updated user: id={}, role={}, status={}", id, user.getRole(), user.getStatus());
         return Result.ok();
     }
+
+    // 删除用户（软删除：设置 status=0 禁用）
+    @DeleteMapping("/users/{id}")
+    public Result<Void> deleteUser(
+            @RequestHeader("X-User-Role") String role,
+            @PathVariable Long id) {
+        checkAdmin(role);
+        User user = userMapper.selectById(id);
+        if (user == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
+        if ("ADMIN".equals(user.getRole())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "不能删除管理员账号");
+        }
+        user.setStatus(0); // 软删除
+        user.setUpdateTime(java.time.LocalDateTime.now());
+        userMapper.updateById(user);
+        log.info("Admin deleted (disabled) user: id={}", id);
+        return Result.ok();
+    }
+
+    // 批量更新用户状态
+    @PutMapping("/users/batch/status")
+    public Result<Void> batchUpdateStatus(
+            @RequestHeader("X-User-Role") String role,
+            @RequestBody Map<String, Object> body) {
+        checkAdmin(role);
+        @SuppressWarnings("unchecked")
+        java.util.List<Integer> ids = (java.util.List<Integer>) body.get("ids");
+        Integer status = Integer.valueOf(String.valueOf(body.get("status")));
+        if (ids == null || ids.isEmpty()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "ids 不能为空");
+        }
+        for (Integer uid : ids) {
+            User user = userMapper.selectById(uid);
+            if (user != null && !"ADMIN".equals(user.getRole())) {
+                user.setStatus(status);
+                user.setUpdateTime(java.time.LocalDateTime.now());
+                userMapper.updateById(user);
+            }
+        }
+        log.info("Admin batch updated user status: count={}, status={}", ids.size(), status);
+        return Result.ok();
+    }
 }

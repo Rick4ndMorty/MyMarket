@@ -123,8 +123,10 @@ public class ProductServiceImpl implements ProductService {
         List<ProductVO> voList = new ArrayList<>();
         if (!products.isEmpty()) {
             List<Long> productIds = products.stream().map(Product::getId).collect(Collectors.toList());
-            // Query min/max price per product from SKU table
+            // 批量查询价格区间
             Map<Long, BigDecimal[]> priceMap = queryMinMaxPrices(productIds);
+            // 批量查询总库存
+            Map<Long, Integer> stockMap = queryTotalStocks(productIds);
 
             for (Product p : products) {
                 ProductVO vo = new ProductVO();
@@ -135,6 +137,7 @@ public class ProductServiceImpl implements ProductService {
                     vo.setMinPrice(prices[0]);
                     vo.setMaxPrice(prices[1]);
                 }
+                vo.setTotalStock(stockMap.getOrDefault(p.getId(), 0));
                 voList.add(vo);
             }
         }
@@ -224,22 +227,68 @@ public class ProductServiceImpl implements ProductService {
         productMapper.updateById(product);
 
         List<SkuSaveReq> skuReqs = req.getSkus();
-        if (skuReqs != null && !skuReqs.isEmpty()) {
-            // Delete existing SKUs and inventories
-            LambdaQueryWrapper<ProductSku> skuWrapper = new LambdaQueryWrapper<>();
-            skuWrapper.eq(ProductSku::getProductId, productId);
-            List<ProductSku> existingSkus = productSkuMapper.selectList(skuWrapper);
-            if (!existingSkus.isEmpty()) {
-                List<Long> skuIds = existingSkus.stream().map(ProductSku::getId).collect(Collectors.toList());
-                LambdaQueryWrapper<Inventory> invWrapper = new LambdaQueryWrapper<>();
-                invWrapper.in(Inventory::getSkuId, skuIds);
-                inventoryMapper.delete(invWrapper);
-                productSkuMapper.delete(skuWrapper);
-            }
+        if (skuReqs == null || skuReqs.isEmpty()) {
+            log.info("Product updated (no SKU changes): id={}, shopId={}", productId, shopId);
+            return Result.ok();
+        }
 
-            // Re-create SKUs and inventories
-            for (int i = 0; i < skuReqs.size(); i++) {
-                SkuSaveReq skuReq = skuReqs.get(i);
+        // 加载当前已有的 SKU 列表
+        LambdaQueryWrapper<ProductSku> skuWrapper = new LambdaQueryWrapper<>();
+        skuWrapper.eq(ProductSku::getProductId, productId);
+        List<ProductSku> existingSkus = productSkuMapper.selectList(skuWrapper);
+
+        // 加载已有 SKU 的 Inventory
+        Map<Long, Inventory> existingInventoryMap = new HashMap<>();
+        if (!existingSkus.isEmpty()) {
+            List<Long> existingSkuIds = existingSkus.stream().map(ProductSku::getId).collect(Collectors.toList());
+            LambdaQueryWrapper<Inventory> invWrapper = new LambdaQueryWrapper<>();
+            invWrapper.in(Inventory::getSkuId, existingSkuIds);
+            List<Inventory> existingInventories = inventoryMapper.selectList(invWrapper);
+            for (Inventory inv : existingInventories) {
+                existingInventoryMap.put(inv.getSkuId(), inv);
+            }
+        }
+        Map<Long, ProductSku> existingSkuMap = existingSkus.stream()
+                .collect(Collectors.toMap(ProductSku::getId, s -> s, (a, b) -> a));
+
+        // 收集请求中的 SKU ID（有 id=更新，无 id=新建）
+        Set<Long> requestSkuIds = new HashSet<>();
+        for (int i = 0; i < skuReqs.size(); i++) {
+            SkuSaveReq skuReq = skuReqs.get(i);
+            if (skuReq.getId() != null) {
+                requestSkuIds.add(skuReq.getId());
+                // 更新已有 SKU
+                ProductSku existingSku = existingSkuMap.get(skuReq.getId());
+                if (existingSku != null) {
+                    existingSku.setSkuName(skuReq.getSkuName());
+                    existingSku.setPrice(skuReq.getPrice());
+                    existingSku.setImage(skuReq.getImage());
+                    existingSku.setSpecifications(toJson(skuReq.getSpecifications()));
+                    existingSku.setUpdateTime(now);
+                    productSkuMapper.updateById(existingSku);
+
+                    // 更新库存——仅在提供库存值时更新，且只改 stock，不动 lockedStock
+                    if (skuReq.getStock() != null) {
+                        Inventory existingInv = existingInventoryMap.get(skuReq.getId());
+                        if (existingInv != null) {
+                            existingInv.setStock(skuReq.getStock());
+                            existingInv.setUpdateTime(now);
+                            inventoryMapper.updateById(existingInv);
+                        } else {
+                            // 原本没有 inventory 记录，则新建
+                            Inventory newInv = new Inventory();
+                            newInv.setSkuId(skuReq.getId());
+                            newInv.setStock(skuReq.getStock());
+                            newInv.setLockedStock(0);
+                            newInv.setVersion(0);
+                            newInv.setCreateTime(now);
+                            newInv.setUpdateTime(now);
+                            inventoryMapper.insert(newInv);
+                        }
+                    }
+                }
+            } else {
+                // 新建 SKU
                 ProductSku sku = new ProductSku();
                 sku.setProductId(productId);
                 sku.setSkuCode(generateSkuCode(productId, i));
@@ -251,6 +300,7 @@ public class ProductServiceImpl implements ProductService {
                 sku.setUpdateTime(now);
                 productSkuMapper.insert(sku);
 
+                // 新建 Inventory
                 Inventory inventory = new Inventory();
                 inventory.setSkuId(sku.getId());
                 inventory.setStock(skuReq.getStock() != null ? skuReq.getStock() : 0);
@@ -262,7 +312,17 @@ public class ProductServiceImpl implements ProductService {
             }
         }
 
-        log.info("Product updated: id={}, shopId={}", productId, shopId);
+        // 删除不再出现在请求中的已有 SKU（及其 Inventory）
+        for (ProductSku existingSku : existingSkus) {
+            if (!requestSkuIds.contains(existingSku.getId())) {
+                LambdaQueryWrapper<Inventory> delInvWrapper = new LambdaQueryWrapper<>();
+                delInvWrapper.eq(Inventory::getSkuId, existingSku.getId());
+                inventoryMapper.delete(delInvWrapper);
+                productSkuMapper.deleteById(existingSku.getId());
+            }
+        }
+
+        log.info("Product updated: id={}, shopId={}, skuCount={}", productId, shopId, skuReqs.size());
         return Result.ok();
     }
 
@@ -344,6 +404,42 @@ public class ProductServiceImpl implements ProductService {
             BigDecimal min = minObj != null ? new BigDecimal(minObj.toString()) : null;
             BigDecimal max = maxObj != null ? new BigDecimal(maxObj.toString()) : null;
             result.put(pid, new BigDecimal[]{min, max});
+        }
+        return result;
+    }
+
+    /**
+     * 批量查询各商品的总库存（汇总所有 SKU 的 inventory.stock）
+     */
+    private Map<Long, Integer> queryTotalStocks(List<Long> productIds) {
+        if (productIds.isEmpty()) return Collections.emptyMap();
+        // 先查 product_sku 得到 sku_id 列表
+        QueryWrapper<ProductSku> skuWrapper = new QueryWrapper<>();
+        skuWrapper.select("id AS sku_id", "product_id")
+                .in("product_id", productIds);
+        List<Map<String, Object>> skuRows = productSkuMapper.selectMaps(skuWrapper);
+
+        if (skuRows.isEmpty()) return Collections.emptyMap();
+
+        Map<Long, Long> skuId2ProductId = new HashMap<>();
+        for (Map<String, Object> skuRow : skuRows) {
+            Long sid = ((Number) skuRow.get("sku_id")).longValue();
+            Long pid = ((Number) skuRow.get("product_id")).longValue();
+            skuId2ProductId.put(sid, pid);
+        }
+
+        // 查 t_inventory 得到各 sku 的 stock
+        List<Long> skuIds = new ArrayList<>(skuId2ProductId.keySet());
+        LambdaQueryWrapper<Inventory> invWrapper = new LambdaQueryWrapper<>();
+        invWrapper.in(Inventory::getSkuId, skuIds);
+        List<Inventory> inventories = inventoryMapper.selectList(invWrapper);
+
+        Map<Long, Integer> result = new HashMap<>();
+        for (Inventory inv : inventories) {
+            Long pid = skuId2ProductId.get(inv.getSkuId());
+            if (pid != null) {
+                result.merge(pid, inv.getStock(), Integer::sum);
+            }
         }
         return result;
     }

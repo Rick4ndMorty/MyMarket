@@ -5,12 +5,15 @@ import java.util.Map;
 
 public class SkuSaveReq {
 
+    private Long id;
     private String skuName;
     private Map<String, String> specifications;
     private BigDecimal price;
     private String image;
     private Integer stock;
 
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
     public String getSkuName() { return skuName; }
     public void setSkuName(String skuName) { this.skuName = skuName; }
     public Map<String, String> getSpecifications() { return specifications; }

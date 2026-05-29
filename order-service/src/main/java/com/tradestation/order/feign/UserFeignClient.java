@@ -15,4 +15,7 @@ public interface UserFeignClient {
 
     @GetMapping("/user/address/{id}")
     Result<Map<String, Object>> getAddress(@PathVariable("id") Long id);
+
+    @GetMapping("/user/inner/{id}")
+    Result<Map<String, Object>> getUserById(@PathVariable("id") Long id);
 }

@@ -7,6 +7,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.cloud.openfeign.FallbackFactory;
 import org.springframework.stereotype.Component;
 
+import java.util.Map;
+
 @Component
 public class UserFeignFallbackFactory implements FallbackFactory<UserFeignClient> {
 
@@ -15,9 +17,18 @@ public class UserFeignFallbackFactory implements FallbackFactory<UserFeignClient
     @Override
     public UserFeignClient create(Throwable cause) {
         log.error("UserFeignClient fallback triggered", cause);
-        return id -> {
-            log.error("(触发降级)getAddress fallback, addressId={}", id);
-            return Result.fail(ErrorCode.SERVICE_DEGRADED);
+        return new UserFeignClient() {
+            @Override
+            public Result<Map<String, Object>> getAddress(Long id) {
+                log.error("(触发降级)getAddress fallback, addressId={}", id);
+                return Result.fail(ErrorCode.SERVICE_DEGRADED);
+            }
+
+            @Override
+            public Result<Map<String, Object>> getUserById(Long id) {
+                log.error("(触发降级)getUserById fallback, userId={}", id);
+                return Result.fail(ErrorCode.SERVICE_DEGRADED);
+            }
         };
     }
 }

@@ -16,6 +16,7 @@ public class ProductVO {
     private String status;
     private BigDecimal minPrice;
     private BigDecimal maxPrice;
+    private Integer totalStock;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 
@@ -39,6 +40,8 @@ public class ProductVO {
     public void setMinPrice(BigDecimal minPrice) { this.minPrice = minPrice; }
     public BigDecimal getMaxPrice() { return maxPrice; }
     public void setMaxPrice(BigDecimal maxPrice) { this.maxPrice = maxPrice; }
+    public Integer getTotalStock() { return totalStock; }
+    public void setTotalStock(Integer totalStock) { this.totalStock = totalStock; }
     public LocalDateTime getCreateTime() { return createTime; }
     public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
     public LocalDateTime getUpdateTime() { return updateTime; }

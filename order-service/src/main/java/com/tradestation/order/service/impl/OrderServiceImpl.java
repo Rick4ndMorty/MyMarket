@@ -120,22 +120,19 @@ public class OrderServiceImpl implements OrderService {
             }
         }
 
-        // c) 校验所有 SKU 存在，且属于同一店铺
+        // c) 校验所有 SKU 存在，收集店铺ID（允许跨店下单）
         Long shopId = null;
         for (Long skuId : skuIds) {
             Map<String, Object> sku = skuMap.get(skuId);
             if (sku == null) {
                 throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND, "sku not found: " + skuId);
             }
-            Object shopIdObj = sku.get("shopId");
-            if (shopIdObj == null) {
-                throw new BusinessException(ErrorCode.INTERNAL_ERROR, "sku has no shopId: " + skuId);
-            }
-            long currentShopId = ((Number) shopIdObj).longValue();
+            // 取第一个有 shopId 的 SKU 作为订单归属店铺
             if (shopId == null) {
-                shopId = currentShopId;
-            } else if (!shopId.equals(currentShopId)) {
-                throw new BusinessException(ErrorCode.PARAM_ERROR, "all items must belong to the same shop");
+                Object shopIdObj = sku.get("shopId");
+                if (shopIdObj != null) {
+                    shopId = ((Number) shopIdObj).longValue();
+                }
             }
         }
 
@@ -170,6 +167,18 @@ public class OrderServiceImpl implements OrderService {
         order.setTotalAmount(totalAmount);
         order.setPayAmount(totalAmount);
         order.setAddressSnapshot(addressSnapshotJson);
+        order.setRemark(req.getRemark());
+        try {
+            Result<Map<String, Object>> userResult = userFeignClient.getUserById(userId);
+            if (userResult.getCode() == 200 && userResult.getData() != null) {
+                Object username = userResult.getData().get("username");
+                if (username != null) {
+                    order.setBuyerName(username.toString());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("获取买家用户名失败，不影响下单: userId={}, error={}", userId, e.getMessage());
+        }
         order.setStatus(STATUS_PENDING_PAYMENT);
         order.setCreateTime(now);
         order.setUpdateTime(now);
@@ -582,6 +591,8 @@ public class OrderServiceImpl implements OrderService {
         vo.setTotalAmount(order.getTotalAmount());
         vo.setPayAmount(order.getPayAmount());
         vo.setStatus(order.getStatus());
+        vo.setRemark(order.getRemark());
+        vo.setBuyerName(order.getBuyerName());
         vo.setCancelReason(order.getCancelReason());
         vo.setPayTime(order.getPayTime());
         vo.setShipTime(order.getShipTime());

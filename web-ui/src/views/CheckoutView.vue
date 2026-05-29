@@ -33,15 +33,17 @@
         </el-card>
 
         <el-card class="section-card">
-          <template #header><strong>商品清单</strong></template>
-          <div v-if="cartStore.items.length === 0">
+          <template #header>
+            <strong>{{ isBuyNow ? '商品清单（立即购买）' : '商品清单' }}</strong>
+          </template>
+          <div v-if="checkoutItems.length === 0">
             <el-empty description="购物车为空">
               <el-button type="primary" @click="$router.push('/')">去逛逛</el-button>
             </el-empty>
           </div>
           <div v-else>
             <div
-              v-for="item in cartStore.items"
+              v-for="item in checkoutItems"
               :key="item.skuId"
               class="checkout-item"
             >
@@ -52,14 +54,14 @@
               </div>
               <span class="checkout-item-price">&yen;{{ item.price.toFixed(2) }}</span>
               <div class="checkout-item-qty-wrap">
-                <el-button size="small" text @click="cartStore.updateQuantity(item.skuId, item.quantity - 1)">-</el-button>
+                <el-button size="small" text @click="isBuyNow ? updateBuyNowQuantity(item.skuId, item.quantity - 1) : cartStore.updateQuantity(item.skuId, item.quantity - 1)">-</el-button>
                 <span>{{ item.quantity }}</span>
-                <el-button size="small" text @click="cartStore.updateQuantity(item.skuId, item.quantity + 1)">+</el-button>
+                <el-button size="small" text @click="isBuyNow ? updateBuyNowQuantity(item.skuId, item.quantity + 1) : cartStore.updateQuantity(item.skuId, item.quantity + 1)">+</el-button>
               </div>
               <span class="checkout-item-subtotal">
                 &yen;{{ (item.price * item.quantity).toFixed(2) }}
               </span>
-              <el-button type="danger" size="small" text @click="cartStore.removeItem(item.skuId)">删除</el-button>
+              <el-button v-if="!isBuyNow" type="danger" size="small" text @click="cartStore.removeItem(item.skuId)">删除</el-button>
             </div>
           </div>
         </el-card>
@@ -70,7 +72,7 @@
           <template #header><strong>订单摘要</strong></template>
           <div class="summary-row">
             <span>商品总计</span>
-            <span>&yen;{{ cartStore.totalPrice.toFixed(2) }}</span>
+            <span>&yen;{{ checkoutTotalPrice.toFixed(2) }}</span>
           </div>
           <div class="summary-row">
             <span>运费</span>
@@ -79,7 +81,7 @@
           <el-divider />
           <div class="summary-total">
             <span>应付金额</span>
-            <span class="total-price">&yen;{{ cartStore.totalPrice.toFixed(2) }}</span>
+            <span class="total-price">&yen;{{ checkoutTotalPrice.toFixed(2) }}</span>
           </div>
           <div class="remark-wrap">
             <el-input
@@ -93,7 +95,7 @@
             size="large"
             style="width: 100%; margin-top: 16px;"
             :loading="submitting"
-            :disabled="!selectedAddressId || cartStore.items.length === 0"
+            :disabled="!selectedAddressId || checkoutItems.length === 0"
             @click="placeOrder"
           >
             提交订单
@@ -105,15 +107,52 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCartStore } from '@/stores/cart'
 import { getAddresses } from '@/api/user'
 import { createOrder } from '@/api/order'
 import { ElMessage } from 'element-plus'
 
+// 购物车商品项类型
+interface CheckoutItem {
+  skuId: number
+  skuName: string
+  price: number
+  quantity: number
+  productId: number
+  productName: string
+  image: string
+  shopId: number
+}
+
+// 从 sessionStorage 读取"立即购买"商品
+function loadBuyNowItems(): CheckoutItem[] | null {
+  try {
+    const raw = sessionStorage.getItem('buyNowItems')
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
 const router = useRouter()
 const cartStore = useCartStore()
+
+// 是否为"立即购买"模式
+const isBuyNow = ref(false)
+// 立即购买的商品列表
+const buyNowItems = ref<CheckoutItem[]>([])
+
+// 结算商品列表：立即购买模式用 buyNowItems，否则用购物车
+const checkoutItems = computed<CheckoutItem[]>(() => {
+  return isBuyNow.value ? buyNowItems.value : cartStore.items
+})
+
+// 结算总价
+const checkoutTotalPrice = computed(() => {
+  return checkoutItems.value.reduce((sum, item) => sum + item.price * item.quantity, 0)
+})
 
 const addresses = ref<any[]>([])
 const selectedAddressId = ref<number | null>(null)
@@ -136,21 +175,14 @@ async function loadAddresses() {
 }
 
 async function placeOrder() {
-  if (!selectedAddressId.value || cartStore.items.length === 0) {
+  if (!selectedAddressId.value || checkoutItems.value.length === 0) {
     ElMessage.warning('请选择收货地址')
-    return
-  }
-
-  // 检测跨店商品
-  const shopIds = new Set(cartStore.items.map(i => i.shopId).filter(Boolean))
-  if (shopIds.size > 1) {
-    ElMessage.warning('购物车中包含不同店铺的商品，请分别下单。可在购物车下拉框中清空后重新添加。')
     return
   }
 
   submitting.value = true
   try {
-    const orderItems = cartStore.items.map(i => ({
+    const orderItems = checkoutItems.value.map(i => ({
       skuId: i.skuId,
       quantity: i.quantity
     }))
@@ -167,7 +199,12 @@ async function placeOrder() {
       return
     }
 
-    cartStore.clear()
+    // 下单成功后清理对应数据源
+    if (isBuyNow.value) {
+      sessionStorage.removeItem('buyNowItems')
+    } else {
+      cartStore.clear()
+    }
     ElMessage.success('下单成功，请完成支付')
     router.push(`/payment/${orderId}`)
   } catch {
@@ -177,7 +214,21 @@ async function placeOrder() {
   }
 }
 
+// 立即购买模式下更新数量
+function updateBuyNowQuantity(skuId: number, quantity: number) {
+  const item = buyNowItems.value.find(i => i.skuId === skuId)
+  if (item) {
+    item.quantity = Math.max(1, quantity)
+  }
+}
+
 onMounted(() => {
+  // 检查是否为"立即购买"模式
+  const cached = loadBuyNowItems()
+  if (cached && cached.length > 0) {
+    isBuyNow.value = true
+    buyNowItems.value = cached
+  }
   loadAddresses()
 })
 </script>

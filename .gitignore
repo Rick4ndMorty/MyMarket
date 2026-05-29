@@ -1,3 +1,8 @@
 web-ui/node_modules/
 **/target/
 ignore/
+.claude/
+.gitignore
+.codegraph/
+node_modules/
+.env

@@ -59,6 +59,16 @@ public class PaymentController {
         }
     }
 
+    /**
+     * 主动查询支付宝支付状态并同步（用于同步回调后的二次确认）
+     * 安全关键：防止用户支付成功但支付宝异步通知未到达的情况
+     */
+    @PostMapping("/query-alipay/{paymentNo}")
+    public Result<PaymentVO> queryAlipayStatus(@PathVariable String paymentNo) {
+        log.info("query alipay status: paymentNo={}", paymentNo);
+        return paymentService.queryAlipayAndSync(paymentNo);
+    }
+
     @GetMapping("/callback/alipay/return")
     public Result<PaymentVO> alipayReturn(HttpServletRequest request) {
         Map<String, String> params = new HashMap<>();

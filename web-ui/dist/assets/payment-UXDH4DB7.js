@@ -1,1 +1,0 @@
-import{O as a}from"./index-Cd1gN6Q_.js";function n(t){return a.post("/payment",t)}function o(t){return a.get(`/payment/no/${t}`)}function r(t){return a.post(`/payment/callback/mock/${t}`)}export{n as c,o as g,r as m};

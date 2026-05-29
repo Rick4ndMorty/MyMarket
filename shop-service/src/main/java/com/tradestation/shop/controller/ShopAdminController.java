@@ -103,4 +103,41 @@ public class ShopAdminController {
 
         return Result.ok();
     }
+
+    // 获取店铺详情
+    @GetMapping("/shops/{id}")
+    public Result<Shop> getShopDetail(
+            @RequestHeader("X-User-Role") String role,
+            @PathVariable Long id) {
+        checkAdmin(role);
+        Shop shop = shopMapper.selectById(id);
+        if (shop == null) {
+            throw new BusinessException(ErrorCode.SHOP_NOT_FOUND);
+        }
+        return Result.ok(shop);
+    }
+
+    // 关闭店铺
+    @PutMapping("/shops/{id}/close")
+    public Result<Void> closeShop(
+            @RequestHeader("X-User-Role") String role,
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, Object> body) {
+        checkAdmin(role);
+        Shop shop = shopMapper.selectById(id);
+        if (shop == null) {
+            throw new BusinessException(ErrorCode.SHOP_NOT_FOUND);
+        }
+        if ("CLOSED".equals(shop.getStatus())) {
+            throw new BusinessException(ErrorCode.SHOP_STATUS_INVALID, "店铺已关闭");
+        }
+        shop.setStatus("CLOSED");
+        if (body != null && body.get("reason") != null) {
+            shop.setRejectReason(String.valueOf(body.get("reason")));
+        }
+        shop.setUpdateTime(LocalDateTime.now());
+        shopMapper.updateById(shop);
+        log.info("Admin closed shop: id={}", id);
+        return Result.ok();
+    }
 }
